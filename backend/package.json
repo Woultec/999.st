@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc",
     "start": "npx prisma migrate deploy && node dist/server.js",
+    "seed": "tsx prisma/seed.ts",
     "test": "echo \"No tests specified\"",
     "lint": "eslint .",
     "format": "prettier --write ."
