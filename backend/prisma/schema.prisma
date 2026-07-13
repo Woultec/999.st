@@ -1,0 +1,64 @@
+// ─── Prisma Schema — 999.st Ecommerce ───────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User Model ─────────────────────────────────────────────
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique
+  password  String?                           // null para sa Google OAuth buyers
+  role      String    @default("BUYER")       // "ADMIN" o "BUYER"
+  products  Product[]                          // Mga products na na-post ng user
+  orders    Order[]                            // Mga order na ginawa ng user
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+// ─── Product Model ──────────────────────────────────────────
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  price       Float
+  imageUrl    String?  @map("image_url")
+  userId      Int      @map("user_id")         // Sino ang nag-post ng product
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  orderItems  OrderItem[]                       // Mga order item na naglalaman ng product na ito
+
+  @@map("products")
+}
+
+// ─── Order Model ──────────────────────────────────────────
+model Order {
+  id         Int         @id @default(autoincrement())
+  userId     Int         @map("user_id")
+  user       User        @relation(fields: [userId], references: [id])
+  status     String      @default("PENDING")    // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  totalPrice Float       @map("total_price")
+  items      OrderItem[]
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@map("orders")
+}
+
+// ─── OrderItem Model ─────────────────────────────────────
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int     @map("order_id")
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int     @map("product_id")
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int     @default(1)
+  price     Float                                     // Presyo ng product nung na-order
+
+  @@map("order_items")
+}

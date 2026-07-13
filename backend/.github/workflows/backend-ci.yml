@@ -1,0 +1,140 @@
+# ─── Backend CI/CD Pipeline ───────────────────────────────
+# 📌 CI (Continuous Integration) = Auto-test kada push
+# 📌 CD (Continuous Deployment) = Auto-deploy sa Render
+#
+# Paano ito gumagana:
+#   1. Mag-push ka sa "main" branch sa GitHub
+#   2. 🤖 GitHub Actions ang magte-test (CI)
+#   3. ✅ Pag pumasa, Render ang magde-deploy (CD)
+#   4. 🚀 Nasa https://999-st-api.onrender.com na ang bago mong code!
+#
+# ⚠️ NOTE: Hindi kailangan ng GitHub Action para mag-deploy sa Render.
+#    Render mismo ang may "Auto-Deploy" — kapag nag-push ka sa main,
+#    automatic na siyang magbu-build at magde-deploy.
+#    Ang GitHub Actions natin ay para sa TESTING lang (CI part).
+
+name: Backend CI/CD
+
+# ─── Kailan tatakbo? ────────────────────────────────────
+on:
+  push:
+    branches: [ main ]        # Tuwing mag-push sa main
+    paths:
+      - 'backend/**'          # Sa backend folder lang
+      - '.github/workflows/backend-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'backend/**'
+
+# ─── Environment Variables ──────────────────────────────
+# Ito ay ginagamit sa TESTING environment (hindi production)
+env:
+  NODE_VERSION: 20
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
+
+# ─── Jobs ───────────────────────────────────────────────
+jobs:
+  # ─── CI: Continuous Integration (Auto-Testing) ────────
+  ci:
+    name: 🧪 Continuous Integration
+    runs-on: ubuntu-latest
+
+    # ─── PostgreSQL Service ───────────────────────────
+    # Para sa Prisma migration sa CI environment
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      # Step 1: I-download ang code mula GitHub
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: I-setup ang Node.js
+      - name: ⚡ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      # Step 3: I-install ang dependencies
+      - name: 📦 Install dependencies
+        run: npm ci
+        working-directory: backend
+
+      # Step 4: I-generate ang Prisma Client
+      # Kailangan ito para magkaroon ng type definitions
+      - name: 🏗️ Generate Prisma Client
+        run: npx prisma generate
+        working-directory: backend
+
+      # Step 5: I-run ang Prisma migrations
+      # Sa test database gagawin (hindi sa production!)
+      - name: 🗃️ Run migrations
+        run: npx prisma migrate deploy
+        working-directory: backend
+
+      # Step 6: I-check ang TypeScript (walang errors?)
+      - name: 🔍 TypeScript Check
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      # Step 7: I-run ang lint (coding standards)
+      - name: 📐 Lint Check
+        run: npm run lint
+        working-directory: backend
+        continue-on-error: true   # Pwedeng i-skip kung may lint errors
+
+      # Step 8: I-run ang tests (future)
+      - name: ✅ Run tests
+        run: npm test
+        working-directory: backend
+
+  # ─── CD: Continuous Deployment (Auto-Deploy) ─────────
+  # NOTE: Render auto-deploy na ito. Kung gusto mong manual
+  # trigger sa Render, i-uncomment ang steps sa ibaba.
+  #
+  # cd:
+  #   name: 🚀 Continuous Deployment
+  #   needs: ci                    # Hintayin munang pumasa ang CI
+  #   runs-on: ubuntu-latest
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #
+  #   steps:
+  #     - name: 🔄 Trigger Render Deploy
+  #       run: |
+  #         curl -X POST \
+  #           -H "Accept: application/json" \
+  #           -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+  #           https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys
+
+  # ─── Kendi: Simple notification pag pumasa lahat ─────
+  success-notification:
+    name: ✅ CI Complete
+    needs: ci
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: 📣 CI Pipeline Complete
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ✅ Backend CI Pipeline — SUCCESS!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  📦 Repository: ${{ github.repository }}"
+          echo "  🌿 Branch:     ${{ github.ref_name }}"
+          echo "  💻 Commit:     ${{ github.sha }}"
+          echo "  👤 Author:     ${{ github.actor }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
