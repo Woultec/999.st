@@ -3,7 +3,7 @@ import cors from "cors";
 
 import routes from "./routes";
 import { notFoundHandler, errorHandler } from "./middlewares/error.middleware";
-import { generalLimiter, authLimiter, orderLimiter } from "./middlewares/rateLimit.middleware";
+import { generalLimiter } from "./middlewares/rateLimit.middleware";
 
 const app = express();
 
