@@ -1,353 +1,465 @@
-import { useState, useEffect } from "react"
-import { Navigate, Link } from "react-router-dom"
-import api from "../../services/api"
-import { useAuth } from "../../contexts/AuthContext"
-import type { Product } from "../../types"
+import { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  getProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} from "../../services/product.service";
+import {
+  getAllOrders,
+  updateOrderStatus,
+  deleteOrder,
+} from "../../services/order.service";
+import type { Product, Order } from "../../types";
+
+type Tab = "products" | "orders";
+type ProductForm = {
+  name: string;
+  description: string;
+  price: string;
+  imageUrl: string;
+};
+
+const emptyProductForm: ProductForm = {
+  name: "",
+  description: "",
+  price: "",
+  imageUrl: "",
+};
 
 export default function Admin() {
-  // ─── Check if logged in AND admin (reactive — uses AuthContext) ─
-  const { user, isLoggedIn } = useAuth()
+  const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("products");
 
-  // Not logged in → login page
-  if (!isLoggedIn) {
-    return <Navigate to="/login" replace />
-  }
+  // Products state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productForm, setProductForm] = useState<ProductForm>(emptyProductForm);
+  const [productError, setProductError] = useState<string | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
-  // Logged in but not admin → home page with message
-  if (user && user.role !== "ADMIN") {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-center max-w-md px-4">
-          <div className="text-6xl mb-4">🚫</div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-500 mb-6">
-            Sorry, only store admins can access this page.
-          </p>
-          <Link
-            to="/"
-            className="inline-block px-6 py-3 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
-          >
-            Back to Home
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  // Orders state
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
 
-  // ─── States ───────────────────────────────────────────
-  const [products, setProducts] = useState<Product[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Form states
-  const [showForm, setShowForm] = useState(false)
-  const [editProduct, setEditProduct] = useState<Product | null>(null)
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [price, setPrice] = useState("")
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState<string | null>(null)
-
-  // Delete confirmation
-  const [deleteId, setDeleteId] = useState<number | null>(null)
-
-  // ─── Fetch products ──────────────────────────────────
-  const fetchProducts = async () => {
+  // Load products
+  async function loadProducts() {
+    setIsLoadingProducts(true);
     try {
-      const response = await api.get("/products")
-      setProducts(response.data.data)
-    } catch (err) {
-      setError("Hindi makuha ang products")
-      console.error(err)
+      const response = await getProducts();
+      setProducts(response.data);
+    } catch {
+      setProductError("Failed to load products");
     } finally {
-      setLoading(false)
+      setIsLoadingProducts(false);
+    }
+  }
+
+  // Load orders
+  async function loadOrders() {
+    setIsLoadingOrders(true);
+    try {
+      const response = await getAllOrders();
+      setOrders(response.data);
+    } catch {
+      setOrderError("Failed to load orders");
+    } finally {
+      setIsLoadingOrders(false);
     }
   }
 
   useEffect(() => {
-    fetchProducts()
-  }, [])
+    loadProducts();
+    loadOrders();
+  }, []);
 
-  // ─── Open form for Add ───────────────────────────────
-  const openAddForm = () => {
-    setEditProduct(null)
-    setName("")
-    setDescription("")
-    setPrice("")
-    setFormError(null)
-    setShowForm(true)
+  // Product form handlers
+  function openCreateForm() {
+    setEditingProduct(null);
+    setProductForm(emptyProductForm);
+    setShowProductForm(true);
+    setProductError(null);
   }
 
-  // ─── Open form for Edit ──────────────────────────────
-  const openEditForm = (product: Product) => {
-    setEditProduct(product)
-    setName(product.name)
-    setDescription(product.description)
-    setPrice(String(product.price))
-    setFormError(null)
-    setShowForm(true)
+  function openEditForm(product: Product) {
+    setEditingProduct(product);
+    setProductForm({
+      name: product.name,
+      description: product.description,
+      price: product.price.toString(),
+      imageUrl: product.imageUrl || "",
+    });
+    setShowProductForm(true);
+    setProductError(null);
   }
 
-  // ─── Close form ──────────────────────────────────────
-  const closeForm = () => {
-    setShowForm(false)
-    setEditProduct(null)
-    setFormError(null)
-  }
-
-  // ─── Save (Add or Update) ────────────────────────────
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // Validation
-    if (!name.trim() || !description.trim() || !price) {
-      setFormError("Please fill in all fields")
-      return
-    }
-
-    const priceNum = Number(price)
-    if (isNaN(priceNum) || priceNum <= 0) {
-      setFormError("Price must be a positive number")
-      return
-    }
-
-    setSaving(true)
-    setFormError(null)
+  async function handleProductSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingProduct(true);
+    setProductError(null);
 
     try {
-      if (editProduct) {
-        // UPDATE existing product
-        await api.put(`/products/${editProduct.id}`, {
-          name: name.trim(),
-          description: description.trim(),
-          price: priceNum,
-        })
+      const data = {
+        name: productForm.name,
+        description: productForm.description,
+        price: Number(productForm.price),
+        ...(productForm.imageUrl ? { imageUrl: productForm.imageUrl } : {}),
+      };
+
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, data);
       } else {
-        // CREATE new product
-        await api.post("/products", {
-          name: name.trim(),
-          description: description.trim(),
-          price: priceNum,
-        })
+        await createProduct(data);
       }
 
-      closeForm()
-      fetchProducts() // Refresh the list
+      setShowProductForm(false);
+      loadProducts();
     } catch (err: any) {
-      const message = err.response?.data?.message || "Error saving product"
-      setFormError(message)
+      setProductError(
+        err?.response?.data?.message || "Failed to save product"
+      );
     } finally {
-      setSaving(false)
+      setIsSavingProduct(false);
     }
   }
 
-  // ─── Delete product ──────────────────────────────────
-  const handleDelete = async (id: number) => {
+  async function handleDeleteProduct(id: number) {
+    if (!window.confirm("Are you sure you want to delete this product?"))
+      return;
     try {
-      await api.delete(`/products/${id}`)
-      setDeleteId(null)
-      fetchProducts() // Refresh the list
-    } catch (err: any) {
-      const message = err.response?.data?.message || "Error deleting product"
-      alert(message)
+      await deleteProduct(id);
+      loadProducts();
+    } catch {
+      setProductError("Failed to delete product");
     }
   }
 
-  // ─── Loading ─────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-      </div>
-    )
+  async function handleUpdateOrderStatus(id: number, status: string) {
+    try {
+      await updateOrderStatus(id, status);
+      loadOrders();
+    } catch {
+      setOrderError("Failed to update order status");
+    }
   }
 
-  // ─── Error ───────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Subukan ulit
-          </button>
-        </div>
-      </div>
-    )
+  async function handleDeleteOrder(id: number) {
+    if (!window.confirm("Are you sure you want to delete this order?")) return;
+    try {
+      await deleteOrder(id);
+      loadOrders();
+    } catch {
+      setOrderError("Failed to delete order");
+    }
   }
+
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: "products", label: "Products", icon: "📦" },
+    { id: "orders", label: "Orders", icon: "🛒" },
+  ];
+
+  const orderStatuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+  const statusColors: Record<string, string> = {
+    PENDING: "bg-yellow-100 text-yellow-800",
+    PROCESSING: "bg-blue-100 text-blue-800",
+    SHIPPED: "bg-purple-100 text-purple-800",
+    DELIVERED: "bg-green-100 text-green-800",
+    CANCELLED: "bg-red-100 text-red-800",
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-500 mt-1">Manage your products</p>
+          <p className="text-gray-500 mt-1">
+            Welcome back, {user?.name || "Admin"} 👋
+          </p>
         </div>
-        <button
-          onClick={openAddForm}
-          className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Add Product
-        </button>
       </div>
 
-      {/* Product Table */}
-      <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500">Name</th>
-              <th className="text-left px-6 py-4 text-sm font-medium text-gray-500 hidden sm:table-cell">
-                Description
-              </th>
-              <th className="text-right px-6 py-4 text-sm font-medium text-gray-500">Price</th>
-              <th className="text-right px-6 py-4 text-sm font-medium text-gray-500">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {products.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="text-center py-12 text-gray-500">
-                  No products yet. Click "Add Product" to get started!
-                </td>
-              </tr>
-            ) : (
-              products.map((product) => (
-                <tr key={product.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-gray-900">{product.name}</td>
-                  <td className="px-6 py-4 text-gray-500 text-sm hidden sm:table-cell max-w-xs truncate">
-                    {product.description}
-                  </td>
-                  <td className="px-6 py-4 text-right text-gray-900 font-medium">
-                    ₱{product.price.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openEditForm(product)}
-                        className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(product.id)}
-                        className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-8">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
+              activeTab === tab.id
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-200"
+            }`}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* ─── Add/Edit Product Modal ─────────────────────── */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              {editProduct ? "Edit Product" : "Add Product"}
+      {/* ===== PRODUCTS TAB ===== */}
+      {activeTab === "products" && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">
+              All Products ({products.length})
             </h2>
-
-            <form onSubmit={handleSave} className="space-y-4">
-              {/* Form error */}
-              {formError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                  {formError}
-                </div>
-              )}
-
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Product name"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Product description"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                />
-              </div>
-
-              {/* Price */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price (₱)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                />
-              </div>
-
-              {/* Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeForm}
-                  className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                >
-                  {saving ? "Saving..." : editProduct ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
+            <button
+              onClick={openCreateForm}
+              className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-xl text-sm transition-all"
+            >
+              + Add Product
+            </button>
           </div>
+
+          {/* Product Form Modal */}
+          {showProductForm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  {editingProduct ? "Edit Product" : "New Product"}
+                </h3>
+
+                {productError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+                    {productError}
+                  </div>
+                )}
+
+                <form onSubmit={handleProductSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      value={productForm.name}
+                      onChange={(e) =>
+                        setProductForm({ ...productForm, name: e.target.value })
+                      }
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Description
+                    </label>
+                    <textarea
+                      value={productForm.description}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          description: e.target.value,
+                        })
+                      }
+                      required
+                      rows={3}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Price (₱)
+                    </label>
+                    <input
+                      type="number"
+                      value={productForm.price}
+                      onChange={(e) =>
+                        setProductForm({ ...productForm, price: e.target.value })
+                      }
+                      required
+                      min={1}
+                      step="0.01"
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Image URL (optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={productForm.imageUrl}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          imageUrl: e.target.value,
+                        })
+                      }
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingProduct}
+                      className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSavingProduct ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Saving...
+                        </>
+                      ) : editingProduct ? (
+                        "Update Product"
+                      ) : (
+                        "Create Product"
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowProductForm(false)}
+                      className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Products List */}
+          {isLoadingProducts ? (
+            <div className="flex justify-center py-12">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
+              <span className="text-5xl block mb-3">📦</span>
+              <p className="text-gray-500">No products yet. Add your first product!</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {products.map((product) => (
+                <div
+                  key={product.id}
+                  className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center justify-between hover:shadow-sm transition-shadow"
+                >
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">
+                      {product.name}
+                    </h3>
+                    <p className="text-sm text-gray-500 truncate mt-0.5">
+                      ₱{product.price.toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => openEditForm(product)}
+                      className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProduct(product.id)}
+                      className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* ─── Delete Confirmation Modal ──────────────────── */}
-      {deleteId !== null && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 text-center">
-            <div className="text-5xl mb-4">🗑️</div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Product?</h2>
-            <p className="text-gray-500 mb-6">This action cannot be undone.</p>
-            <div className="flex items-center justify-center gap-3">
-              <button
-                onClick={() => setDeleteId(null)}
-                className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDelete(deleteId)}
-                className="px-6 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Delete
-              </button>
+      {/* ===== ORDERS TAB ===== */}
+      {activeTab === "orders" && (
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-6">
+            All Orders ({orders.length})
+          </h2>
+
+          {orderError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+              {orderError}
             </div>
-          </div>
+          )}
+
+          {isLoadingOrders ? (
+            <div className="flex justify-center py-12">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
+              <span className="text-5xl block mb-3">🛒</span>
+              <p className="text-gray-500">No orders yet.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="bg-white rounded-2xl border border-gray-100 p-5"
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <span className="font-semibold text-gray-900">
+                        Order #{order.id}
+                      </span>
+                      <span className="text-sm text-gray-500 ml-3">
+                        by {order.user?.name || order.user?.email || "Unknown"}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <select
+                        value={order.status}
+                        onChange={(e) =>
+                          handleUpdateOrderStatus(order.id, e.target.value)
+                        }
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border-0 cursor-pointer outline-none ${
+                          statusColors[order.status] ||
+                          "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {orderStatuses.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => handleDeleteOrder(order.id)}
+                        className="px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-600 mb-2">
+                    {order.items?.map((item, idx) => (
+                      <span key={idx}>
+                        {item.product?.name || `Product #${item.productId}`} x
+                        {item.quantity}
+                        {idx < order.items.length - 1 ? ", " : ""}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">
+                      {new Date(order.createdAt).toLocaleDateString("en-PH", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                    <span className="text-lg font-bold text-gray-900">
+                      ₱{order.total?.toLocaleString() || 0}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
-  )
+  );
 }
