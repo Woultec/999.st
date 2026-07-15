@@ -4,6 +4,7 @@ import Login from "./pages/auth/Login"
 import Register from "./pages/auth/Register"
 import Admin from "./pages/admin/Admin"
 import ProductDetail from "./pages/user/ProductDetail"
+import OrderDetail from "./pages/user/OrderDetail"
 import Profile from "./pages/user/Profile"
 import MainLayout from "./layouts/MainLayout"
 import ProtectedRoute from "./components/ProtectedRoute"
@@ -20,6 +21,14 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/product/:id" element={<ProductDetail />} />
+            <Route
+              path="/order/:id"
+              element={
+                <ProtectedRoute>
+                  <OrderDetail />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/profile"
               element={

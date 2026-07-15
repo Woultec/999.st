@@ -14,11 +14,24 @@ interface OrderItemInput {
   quantity: number;
 }
 
+/** Shape ng createOrder params */
+interface CreateOrderInput {
+  userId: number;
+  items: OrderItemInput[];
+  paymentMethod?: string;
+  shippingAddress?: string;
+}
+
 // ─── CREATE Order ──────────────────────────────────────
 // 📌 Pwedeng mag-order ang buyer — pipili ng products at quantity
 //    Awtomatikong kukunin ang presyo ng product at kakalkulahin ang total
 
-export const createOrder = async (userId: number, items: OrderItemInput[]) => {
+export const createOrder = async ({
+  userId,
+  items,
+  paymentMethod,
+  shippingAddress,
+}: CreateOrderInput) => {
   // Kunin ang mga product details para malaman ang presyo
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
@@ -50,6 +63,8 @@ export const createOrder = async (userId: number, items: OrderItemInput[]) => {
     data: {
       userId,
       totalPrice,
+      paymentMethod: paymentMethod || "COD",
+      shippingAddress: shippingAddress || null,
       items: {
         create: orderItemsData,
       },
@@ -139,7 +154,10 @@ export const getOrderById = async (id: number) => {
 // 📌 Admin lang ang pwedeng mag-update ng status ng order
 //    Statuses: PENDING → PROCESSING → SHIPPED → DELIVERED | CANCELLED
 
-export const updateOrderStatus = async (id: number, status: OrderStatus) => {
+export const updateOrderStatus = async (
+  id: number,
+  status: OrderStatus
+): Promise<any> => {
   try {
     const order = await prisma.order.update({
       where: { id },
@@ -161,6 +179,119 @@ export const updateOrderStatus = async (id: number, status: OrderStatus) => {
   } catch {
     return null;
   }
+};
+
+// ─── UPDATE Payment Status (Admin) ─────────────────────
+// 📌 Admin lang pwedeng mag-verify ng payment
+
+export const updatePaymentStatus = async (
+  id: number,
+  paymentStatus: string,
+  paymentRef?: string
+): Promise<any> => {
+  try {
+    const order = await prisma.order.update({
+      where: { id },
+      data: {
+        paymentStatus,
+        ...(paymentRef ? { paymentRef } : {}),
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, name: true, price: true },
+            },
+          },
+        },
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+    return order;
+  } catch {
+    return null;
+  }
+};
+
+// ─── UPDATE Payment Reference (Buyer) ──────────────────
+// 📌 Buyer ay pwedeng magbigay ng GCash ref number
+
+export const updatePaymentRef = async (
+  id: number,
+  userId: number,
+  paymentRef: string
+): Promise<any> => {
+  try {
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order || order.userId !== userId) return null;
+    if (order.paymentMethod !== "GCASH") return null;
+
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        paymentRef,
+        paymentStatus: "PAID",
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: { id: true, name: true, price: true },
+            },
+          },
+        },
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    });
+    return updated;
+  } catch {
+    return null;
+  }
+};
+
+// ─── Sales Summary (Admin Dashboard) ───────────────────
+// 📌 Admin dashboard stats
+
+export const getSalesSummary = async () => {
+  const [
+    totalOrders,
+    totalRevenue,
+    ordersByStatus,
+    recentOrders,
+  ] = await Promise.all([
+    prisma.order.count(),
+    prisma.order.aggregate({
+      _sum: { totalPrice: true },
+      where: { status: { not: "CANCELLED" } },
+    }),
+    prisma.order.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+    prisma.order.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: { select: { name: true, email: true } },
+        items: {
+          include: {
+            product: { select: { name: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  return {
+    totalOrders,
+    totalRevenue: totalRevenue._sum.totalPrice || 0,
+    ordersByStatus,
+    recentOrders,
+  };
 };
 
 // ─── DELETE Order (Admin) ──────────────────────────────

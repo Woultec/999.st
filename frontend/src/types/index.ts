@@ -39,10 +39,20 @@ export interface Order {
   userId: number;
   user?: User;
   items: OrderItem[];
-  total: number;
+  totalPrice: number;
   status: "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  paymentMethod: "COD" | "GCASH" | null;
+  paymentStatus: "UNPAID" | "PAID" | "VERIFIED" | "REFUNDED";
+  paymentRef: string | null;
+  shippingAddress: string | null;
   createdAt: string;
-  updatedAt: string;
+}
+
+export interface SalesSummary {
+  totalOrders: number;
+  totalRevenue: number;
+  ordersByStatus: { status: string; _count: { id: number } }[];
+  recentOrders: Order[];
 }
 
 export interface ApiError {

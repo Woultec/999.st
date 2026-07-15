@@ -39,13 +39,22 @@ model Product {
 
 // ─── Order Model ──────────────────────────────────────────
 model Order {
-  id         Int         @id @default(autoincrement())
-  userId     Int         @map("user_id")
-  user       User        @relation(fields: [userId], references: [id])
-  status     String      @default("PENDING")    // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
-  totalPrice Float       @map("total_price")
-  items      OrderItem[]
-  createdAt  DateTime    @default(now()) @map("created_at")
+  id              Int         @id @default(autoincrement())
+  userId          Int         @map("user_id")
+  user            User        @relation(fields: [userId], references: [id])
+  status          String      @default("PENDING")    // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  totalPrice      Float       @map("total_price")
+  items           OrderItem[]
+
+  // 💳 Payment fields
+  paymentMethod   String?     @default("COD") @map("payment_method")   // "COD" o "GCASH"
+  paymentStatus   String      @default("UNPAID") @map("payment_status") // UNPAID, PAID, VERIFIED, REFUNDED
+  paymentRef      String?     @map("payment_ref")                       // GCash reference number
+
+  // 📦 Shipping
+  shippingAddress String?     @map("shipping_address")
+
+  createdAt       DateTime    @default(now()) @map("created_at")
 
   @@map("orders")
 }

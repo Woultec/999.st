@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   getProducts,
@@ -9,11 +10,14 @@ import {
 import {
   getAllOrders,
   updateOrderStatus,
+  updatePaymentStatus,
   deleteOrder,
+  getSalesSummary,
 } from "../../services/order.service";
-import type { Product, Order } from "../../types";
+import type { Product, Order, SalesSummary } from "../../types";
 
-type Tab = "products" | "orders";
+type Tab = "dashboard" | "products" | "orders";
+
 type ProductForm = {
   name: string;
   description: string;
@@ -28,11 +32,30 @@ const emptyProductForm: ProductForm = {
   imageUrl: "",
 };
 
+const statusColors: Record<string, string> = {
+  PENDING: "bg-yellow-100 text-yellow-800",
+  PROCESSING: "bg-blue-100 text-blue-800",
+  SHIPPED: "bg-purple-100 text-purple-800",
+  DELIVERED: "bg-green-100 text-green-800",
+  CANCELLED: "bg-red-100 text-red-800",
+};
+
+const paymentStatusColors: Record<string, string> = {
+  UNPAID: "bg-yellow-100 text-yellow-800",
+  PAID: "bg-blue-100 text-blue-800",
+  VERIFIED: "bg-green-100 text-green-800",
+  REFUNDED: "bg-red-100 text-red-800",
+};
+
 export default function Admin() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("products");
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
 
-  // Products state
+  // ─── Dashboard state ───────────────────────────
+  const [salesSummary, setSalesSummary] = useState<SalesSummary | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+
+  // ─── Products state ────────────────────────────
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [showProductForm, setShowProductForm] = useState(false);
@@ -41,12 +64,25 @@ export default function Admin() {
   const [productError, setProductError] = useState<string | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
-  // Orders state
+  // ─── Orders state ──────────────────────────────
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [orderError, setOrderError] = useState<string | null>(null);
 
-  // Load products
+  // ─── Load Dashboard ────────────────────────────
+  async function loadDashboard() {
+    setIsLoadingSummary(true);
+    try {
+      const response = await getSalesSummary();
+      setSalesSummary(response.data);
+    } catch {
+      // Silently fail
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }
+
+  // ─── Load Products ─────────────────────────────
   async function loadProducts() {
     setIsLoadingProducts(true);
     try {
@@ -59,7 +95,7 @@ export default function Admin() {
     }
   }
 
-  // Load orders
+  // ─── Load Orders ───────────────────────────────
   async function loadOrders() {
     setIsLoadingOrders(true);
     try {
@@ -73,11 +109,12 @@ export default function Admin() {
   }
 
   useEffect(() => {
+    loadDashboard();
     loadProducts();
     loadOrders();
   }, []);
 
-  // Product form handlers
+  // ─── Product Handlers ──────────────────────────
   function openCreateForm() {
     setEditingProduct(null);
     setProductForm(emptyProductForm);
@@ -138,12 +175,27 @@ export default function Admin() {
     }
   }
 
+  // ─── Order Handlers ────────────────────────────
   async function handleUpdateOrderStatus(id: number, status: string) {
     try {
       await updateOrderStatus(id, status);
       loadOrders();
+      loadDashboard();
     } catch {
       setOrderError("Failed to update order status");
+    }
+  }
+
+  async function handleUpdatePaymentStatus(
+    id: number,
+    paymentStatus: string
+  ) {
+    try {
+      await updatePaymentStatus(id, paymentStatus);
+      loadOrders();
+      loadDashboard();
+    } catch {
+      setOrderError("Failed to update payment status");
     }
   }
 
@@ -152,24 +204,35 @@ export default function Admin() {
     try {
       await deleteOrder(id);
       loadOrders();
+      loadDashboard();
     } catch {
       setOrderError("Failed to delete order");
     }
   }
 
+  // ─── Render ────────────────────────────────────
   const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "products", label: "Products", icon: "📦" },
     { id: "orders", label: "Orders", icon: "🛒" },
   ];
 
-  const orderStatuses = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
-  const statusColors: Record<string, string> = {
-    PENDING: "bg-yellow-100 text-yellow-800",
-    PROCESSING: "bg-blue-100 text-blue-800",
-    SHIPPED: "bg-purple-100 text-purple-800",
-    DELIVERED: "bg-green-100 text-green-800",
-    CANCELLED: "bg-red-100 text-red-800",
-  };
+  const orderStatuses = [
+    "PENDING",
+    "PROCESSING",
+    "SHIPPED",
+    "DELIVERED",
+    "CANCELLED",
+  ];
+
+  const paymentStatuses = ["UNPAID", "PAID", "VERIFIED", "REFUNDED"];
+
+  // Helper para makuha ang count ng orders by status
+  function getStatusCount(status: string): number {
+    if (!salesSummary) return 0;
+    const found = salesSummary.ordersByStatus.find((s) => s.status === status);
+    return found?._count?.id || 0;
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
@@ -184,7 +247,7 @@ export default function Admin() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-8">
+      <div className="flex gap-2 mb-8 flex-wrap">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -200,9 +263,92 @@ export default function Admin() {
         ))}
       </div>
 
+      {/* ===== DASHBOARD TAB ===== */}
+      {activeTab === "dashboard" && (
+        <div>
+          {isLoadingSummary ? (
+            <div className="flex justify-center py-12">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : salesSummary ? (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <p className="text-sm text-gray-500 mb-1">Total Orders</p>
+                  <p className="text-3xl font-bold text-gray-900">
+                    {salesSummary.totalOrders}
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <p className="text-sm text-gray-500 mb-1">Total Revenue</p>
+                  <p className="text-3xl font-bold text-green-600">
+                    ₱{salesSummary.totalRevenue.toLocaleString()}
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <p className="text-sm text-gray-500 mb-1">Pending</p>
+                  <p className="text-3xl font-bold text-yellow-600">
+                    {getStatusCount("PENDING")}
+                  </p>
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                  <p className="text-sm text-gray-500 mb-1">Delivered</p>
+                  <p className="text-3xl font-bold text-green-600">
+                    {getStatusCount("DELIVERED")}
+                  </p>
+                </div>
+              </div>
+
+              {/* Recent Orders */}
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  Recent Orders
+                </h2>
+                {salesSummary.recentOrders.length === 0 ? (
+                  <p className="text-gray-500 text-center py-6">No orders yet.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {salesSummary.recentOrders.map((order: any) => (
+                      <Link
+                        key={order.id}
+                        to={`/order/${order.id}`}
+                        className="flex items-center justify-between py-3 hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">
+                            #{order.id} — {order.user?.name || order.user?.email || "Unknown"}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {order.items?.length} item(s)
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-gray-900">
+                            ₱{order.totalPrice?.toLocaleString() || 0}
+                          </p>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
+              <span className="text-5xl block mb-3">📊</span>
+              <p className="text-gray-500">
+                No data available yet. Start by adding products and receiving orders!
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ===== PRODUCTS TAB ===== */}
       {activeTab === "products" && (
         <div>
+          {/* ... same as before ... */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">
               All Products ({products.length})
@@ -401,9 +547,12 @@ export default function Admin() {
                 >
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <span className="font-semibold text-gray-900">
+                      <Link
+                        to={`/order/${order.id}`}
+                        className="font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                      >
                         Order #{order.id}
-                      </span>
+                      </Link>
                       <span className="text-sm text-gray-500 ml-3">
                         by {order.user?.name || order.user?.email || "Unknown"}
                       </span>
@@ -433,7 +582,9 @@ export default function Admin() {
                       </button>
                     </div>
                   </div>
-                  <div className="text-sm text-gray-600 mb-2">
+
+                  {/* Items Preview */}
+                  <div className="text-sm text-gray-600 mb-3">
                     {order.items?.map((item, idx) => (
                       <span key={idx}>
                         {item.product?.name || `Product #${item.productId}`} x
@@ -442,18 +593,50 @@ export default function Admin() {
                       </span>
                     ))}
                   </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">
-                      {new Date(order.createdAt).toLocaleDateString("en-PH", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>
-                    <span className="text-lg font-bold text-gray-900">
-                      ₱{order.total?.toLocaleString() || 0}
-                    </span>
+
+                  {/* Payment Info + Pricing */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400">
+                        {order.paymentMethod === "GCASH" ? "📱" : "💵"}{" "}
+                        {order.paymentMethod || "COD"}
+                      </span>
+                      <select
+                        value={order.paymentStatus}
+                        onChange={(e) =>
+                          handleUpdatePaymentStatus(order.id, e.target.value)
+                        }
+                        className={`px-2 py-1 rounded-lg text-xs font-medium border-0 cursor-pointer outline-none ${
+                          paymentStatusColors[order.paymentStatus] ||
+                          "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {paymentStatuses.map((ps) => (
+                          <option key={ps} value={ps}>
+                            {ps}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400">
+                        {new Date(order.createdAt).toLocaleDateString("en-PH", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                      <span className="text-lg font-bold text-gray-900">
+                        ₱{order.totalPrice?.toLocaleString() || 0}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* GCash Ref Number */}
+                  {order.paymentRef && (
+                    <div className="mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
+                      GCash Ref: <span className="font-mono">{order.paymentRef}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
