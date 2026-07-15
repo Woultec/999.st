@@ -5,7 +5,7 @@ export interface Product {
   price: number;
   imageUrl: string | null;
   userId: number;
-  user: {
+  user?: {
     id: number;
     name: string;
     email: string;
@@ -24,4 +24,30 @@ export interface User {
 export interface AuthResponse {
   token: string;
   user: User;
+}
+
+export interface OrderItem {
+  id: number;
+  productId: number;
+  quantity: number;
+  price: number;
+  product: Product;
+}
+
+export interface Order {
+  id: number;
+  userId: number;
+  user?: User;
+  items: OrderItem[];
+  total: number;
+  status: "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiError {
+  success: false;
+  statusCode: number;
+  message: string;
+  errors?: string[];
 }
