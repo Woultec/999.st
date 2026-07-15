@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { getOrderById, updatePaymentRef } from "../../services/order.service";
 import { useAuth } from "../../contexts/AuthContext";
 import type { Order } from "../../types";
@@ -21,7 +21,6 @@ const paymentStatusColors: Record<string, string> = {
 
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [order, setOrder] = useState<Order | null>(null);
