@@ -3,7 +3,6 @@
 //    Pati na rin ang PayMongo.js para sa secure card form
 
 import api from "./api";
-import type { Order } from "../types";
 
 /** Create Payment Intent — tawag sa backend para gumawa ng PayMongo PaymentIntent */
 export async function createPaymentIntent(orderId: number) {
