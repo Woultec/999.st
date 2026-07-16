@@ -323,7 +323,7 @@ export default function Profile() {
                     {order.items?.length || 0} item(s)
                     {order.paymentMethod && (
                       <span className="ml-2 text-xs text-gray-400">
-                        · {order.paymentMethod === "GCASH" ? "📱 GCash" : "💵 COD"}
+                        · {order.paymentMethod === "GCASH" ? "📱 GCash" : order.paymentMethod === "CARD" ? "💳 Card" : "💵 COD"}
                       </span>
                     )}
                   </div>

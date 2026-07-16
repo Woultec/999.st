@@ -598,7 +598,7 @@ export default function Admin() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-gray-400">
-                        {order.paymentMethod === "GCASH" ? "📱" : "💵"}{" "}
+                        {order.paymentMethod === "GCASH" ? "📱" : order.paymentMethod === "CARD" ? "💳" : "💵"}{" "}
                         {order.paymentMethod || "COD"}
                       </span>
                       <select

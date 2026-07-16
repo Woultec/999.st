@@ -20,7 +20,7 @@ export default function ProductDetail() {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Payment & shipping state
-  const [paymentMethod, setPaymentMethod] = useState<"COD" | "GCASH">("COD");
+  const [paymentMethod, setPaymentMethod] = useState<"COD" | "GCASH" | "CARD">("COD");
   const [shippingAddress, setShippingAddress] = useState("");
   const [showCheckoutForm, setShowCheckoutForm] = useState(false);
 
@@ -57,7 +57,7 @@ export default function ProductDetail() {
       const response = await createOrder({
         items: [{ productId: Number(id), quantity }],
         paymentMethod,
-        shippingAddress: paymentMethod === "GCASH" ? shippingAddress : undefined,
+        shippingAddress: paymentMethod === "GCASH" || paymentMethod === "CARD" ? shippingAddress : undefined,
       });
       const orderId = response.data.id;
       setSuccessMsg("Order placed successfully! 🎉");
@@ -268,6 +268,23 @@ export default function ProductDetail() {
                     Pay via GCash
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("CARD")}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    paymentMethod === "CARD"
+                      ? "border-gray-900 bg-gray-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <span className="text-2xl block mb-1">💳</span>
+                  <span className="font-semibold text-sm text-gray-900">
+                    Credit/Debit Card
+                  </span>
+                  <span className="text-xs text-gray-500 block mt-1">
+                    Visa, Mastercard, JCB
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -283,12 +300,12 @@ export default function ProductDetail() {
                 value={shippingAddress}
                 onChange={(e) => setShippingAddress(e.target.value)}
                 placeholder={
-                  paymentMethod === "GCASH"
+                  paymentMethod === "GCASH" || paymentMethod === "CARD"
                     ? "Street, Barangay, City, Province, ZIP Code"
                     : "Street, Barangay, City, Province, ZIP Code (optional for COD)"
                 }
                 rows={3}
-                required={paymentMethod === "GCASH"}
+                required={paymentMethod === "GCASH" || paymentMethod === "CARD"}
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all resize-none"
               />
             </div>
@@ -307,11 +324,25 @@ export default function ProductDetail() {
               </div>
             )}
 
+            {paymentMethod === "CARD" && (
+              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                <p className="text-sm font-medium text-purple-800 mb-1">
+                  💳 Credit/Debit Card Payment
+                </p>
+                <p className="text-xs text-purple-700 leading-relaxed">
+                  After placing your order, you will be redirected to our
+                  secure payment page powered by PayMongo to enter your card
+                  details. We accept Visa, Mastercard, and JCB. 3D Secure
+                  may be required for verification.
+                </p>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex gap-3">
               <button
                 onClick={handlePlaceOrder}
-                disabled={isAdding || (paymentMethod === "GCASH" && !shippingAddress.trim())}
+                disabled={isAdding || ((paymentMethod === "GCASH" || paymentMethod === "CARD") && !shippingAddress.trim())}
                 className="flex-1 py-3 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isAdding ? (

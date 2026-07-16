@@ -41,9 +41,10 @@ export interface Order {
   items: OrderItem[];
   totalPrice: number;
   status: "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
-  paymentMethod: "COD" | "GCASH" | null;
+  paymentMethod: "COD" | "GCASH" | "CARD" | null;
   paymentStatus: "UNPAID" | "PAID" | "VERIFIED" | "REFUNDED";
   paymentRef: string | null;
+  paymongoIntentId?: string | null;
   shippingAddress: string | null;
   createdAt: string;
 }

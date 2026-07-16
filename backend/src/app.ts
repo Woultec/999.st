@@ -7,6 +7,24 @@ import { generalLimiter } from "./middlewares/rateLimit.middleware";
 
 const app = express();
 
+// ─── Webhook Middleware — Kailangan ng RAW body para ma-verify ang webhook ──
+// ⚠️ DAPAT nasa UNAHAN ng express.json() para makuha ang raw body!
+app.use("/api/payments/webhook", (req: any, _res: any, next: any) => {
+  let data = "";
+  req.on("data", (chunk: string) => {
+    data += chunk;
+  });
+  req.on("end", () => {
+    req.rawBody = data; // I-save ang raw body para sa signature verification
+    try {
+      req.body = JSON.parse(data); // I-parse bilang JSON
+    } catch {
+      req.body = {};
+    }
+    next();
+  });
+});
+
 // ─── Global Middleware ────────────────────────────────
 app.use(cors());
 app.use(express.json());
