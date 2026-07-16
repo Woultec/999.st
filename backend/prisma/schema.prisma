@@ -60,6 +60,20 @@ model Order {
   @@map("orders")
 }
 
+// ─── PaymentSetting Model ────────────────────────────────
+// 📌 Mga e-wallet na pwedeng gamitin ng buyers (GCash, PayMaya, etc.)
+//    Admin ang nagma-manage nito sa dashboard
+model PaymentSetting {
+  id        Int      @id @default(autoincrement())
+  name      String                                    // "GCash", "PayMaya", "Maya"
+  number    String                                    // 09297041003
+  icon      String   @default("📱")                   // Emoji icon
+  isActive  Boolean  @default(true)                   // Pwedeng i-deactivate
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("payment_settings")
+}
+
 // ─── OrderItem Model ─────────────────────────────────────
 model OrderItem {
   id        Int     @id @default(autoincrement())

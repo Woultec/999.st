@@ -14,9 +14,15 @@ import {
   deleteOrder,
   getSalesSummary,
 } from "../../services/order.service";
-import type { Product, Order, SalesSummary } from "../../types";
+import {
+  getAllPaymentSettings,
+  createPaymentSetting,
+  updatePaymentSetting,
+  deletePaymentSetting,
+} from "../../services/paymentSetting.service";
+import type { Product, Order, SalesSummary, PaymentSetting } from "../../types";
 
-type Tab = "dashboard" | "products" | "orders";
+type Tab = "dashboard" | "products" | "orders" | "payments";
 
 type ProductForm = {
   name: string;
@@ -25,11 +31,23 @@ type ProductForm = {
   imageUrl: string;
 };
 
+type PaymentForm = {
+  name: string;
+  number: string;
+  icon: string;
+};
+
 const emptyProductForm: ProductForm = {
   name: "",
   description: "",
   price: "",
   imageUrl: "",
+};
+
+const emptyPaymentForm: PaymentForm = {
+  name: "",
+  number: "",
+  icon: "📱",
 };
 
 const statusColors: Record<string, string> = {
@@ -46,6 +64,8 @@ const paymentStatusColors: Record<string, string> = {
   VERIFIED: "bg-green-100 text-green-800",
   REFUNDED: "bg-red-100 text-red-800",
 };
+
+const EWALLET_ICONS = ["📱", "💳", "🏦", "💰", "🪙", "💎", "🏧", "💲"];
 
 export default function Admin() {
   const { user } = useAuth();
@@ -68,6 +88,15 @@ export default function Admin() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoadingOrders, setIsLoadingOrders] = useState(true);
   const [orderError, setOrderError] = useState<string | null>(null);
+
+  // ─── Payment Settings state ────────────────────
+  const [paymentSettings, setPaymentSettings] = useState<PaymentSetting[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(true);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<PaymentSetting | null>(null);
+  const [paymentForm, setPaymentForm] = useState<PaymentForm>(emptyPaymentForm);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [isSavingPayment, setIsSavingPayment] = useState(false);
 
   // ─── Load Dashboard ────────────────────────────
   async function loadDashboard() {
@@ -108,10 +137,24 @@ export default function Admin() {
     }
   }
 
+  // ─── Load Payment Settings ─────────────────────
+  async function loadPaymentSettings() {
+    setIsLoadingPayments(true);
+    try {
+      const response = await getAllPaymentSettings();
+      setPaymentSettings(response.data);
+    } catch {
+      setPaymentError("Failed to load payment settings");
+    } finally {
+      setIsLoadingPayments(false);
+    }
+  }
+
   useEffect(() => {
     loadDashboard();
     loadProducts();
     loadOrders();
+    loadPaymentSettings();
   }, []);
 
   // ─── Product Handlers ──────────────────────────
@@ -210,11 +253,84 @@ export default function Admin() {
     }
   }
 
+  // ─── Payment Setting Handlers ──────────────────
+  function openCreatePaymentForm() {
+    setEditingPayment(null);
+    setPaymentForm(emptyPaymentForm);
+    setShowPaymentForm(true);
+    setPaymentError(null);
+  }
+
+  function openEditPaymentForm(setting: PaymentSetting) {
+    setEditingPayment(setting);
+    setPaymentForm({
+      name: setting.name,
+      number: setting.number,
+      icon: setting.icon,
+    });
+    setShowPaymentForm(true);
+    setPaymentError(null);
+  }
+
+  async function handlePaymentSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setIsSavingPayment(true);
+    setPaymentError(null);
+
+    try {
+      if (editingPayment) {
+        await updatePaymentSetting(editingPayment.id, {
+          name: paymentForm.name,
+          number: paymentForm.number,
+          icon: paymentForm.icon,
+        });
+      } else {
+        await createPaymentSetting({
+          name: paymentForm.name,
+          number: paymentForm.number,
+          icon: paymentForm.icon,
+        });
+      }
+
+      setShowPaymentForm(false);
+      loadPaymentSettings();
+    } catch (err: any) {
+      setPaymentError(
+        err?.response?.data?.message || "Failed to save payment setting"
+      );
+    } finally {
+      setIsSavingPayment(false);
+    }
+  }
+
+  async function handleTogglePaymentActive(setting: PaymentSetting) {
+    try {
+      await updatePaymentSetting(setting.id, {
+        isActive: !setting.isActive,
+      });
+      loadPaymentSettings();
+    } catch {
+      setPaymentError("Failed to update payment setting");
+    }
+  }
+
+  async function handleDeletePaymentSetting(id: number) {
+    if (!window.confirm("Are you sure you want to delete this e-wallet?"))
+      return;
+    try {
+      await deletePaymentSetting(id);
+      loadPaymentSettings();
+    } catch {
+      setPaymentError("Failed to delete payment setting");
+    }
+  }
+
   // ─── Render ────────────────────────────────────
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: "dashboard", label: "Dashboard", icon: "📊" },
     { id: "products", label: "Products", icon: "📦" },
     { id: "orders", label: "Orders", icon: "🛒" },
+    { id: "payments", label: "Payments", icon: "💳" },
   ];
 
   const orderStatuses = [
@@ -348,7 +464,6 @@ export default function Admin() {
       {/* ===== PRODUCTS TAB ===== */}
       {activeTab === "products" && (
         <div>
-          {/* ... same as before ... */}
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">
               All Products ({products.length})
@@ -377,46 +492,31 @@ export default function Admin() {
 
                 <form onSubmit={handleProductSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                     <input
                       type="text"
                       value={productForm.name}
-                      onChange={(e) =>
-                        setProductForm({ ...productForm, name: e.target.value })
-                      }
+                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
                       required
                       className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Description
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <textarea
                       value={productForm.description}
-                      onChange={(e) =>
-                        setProductForm({
-                          ...productForm,
-                          description: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
                       required
                       rows={3}
                       className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none resize-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Price (₱)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Price (₱)</label>
                     <input
                       type="number"
                       value={productForm.price}
-                      onChange={(e) =>
-                        setProductForm({ ...productForm, price: e.target.value })
-                      }
+                      onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                       required
                       min={1}
                       step="0.01"
@@ -424,18 +524,11 @@ export default function Admin() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Image URL (optional)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Image URL (optional)</label>
                     <input
                       type="url"
                       value={productForm.imageUrl}
-                      onChange={(e) =>
-                        setProductForm({
-                          ...productForm,
-                          imageUrl: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setProductForm({ ...productForm, imageUrl: e.target.value })}
                       placeholder="https://example.com/image.jpg"
                       className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                     />
@@ -447,15 +540,8 @@ export default function Admin() {
                       className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSavingProduct ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Saving...
-                        </>
-                      ) : editingProduct ? (
-                        "Update Product"
-                      ) : (
-                        "Create Product"
-                      )}
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving...</>
+                      ) : editingProduct ? "Update Product" : "Create Product"}
                     </button>
                     <button
                       type="button"
@@ -488,26 +574,12 @@ export default function Admin() {
                   className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center justify-between hover:shadow-sm transition-shadow"
                 >
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-gray-900 truncate">
-                      {product.name}
-                    </h3>
-                    <p className="text-sm text-gray-500 truncate mt-0.5">
-                      ₱{product.price.toLocaleString()}
-                    </p>
+                    <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
+                    <p className="text-sm text-gray-500 truncate mt-0.5">₱{product.price.toLocaleString()}</p>
                   </div>
                   <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => openEditForm(product)}
-                      className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProduct(product.id)}
-                      className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      Delete
-                    </button>
+                    <button onClick={() => openEditForm(product)} className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">Edit</button>
+                    <button onClick={() => handleDeleteProduct(product.id)} className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors">Delete</button>
                   </div>
                 </div>
               ))}
@@ -524,9 +596,7 @@ export default function Admin() {
           </h2>
 
           {orderError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-              {orderError}
-            </div>
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">{orderError}</div>
           )}
 
           {isLoadingOrders ? (
@@ -541,16 +611,10 @@ export default function Admin() {
           ) : (
             <div className="grid gap-4">
               {orders.map((order) => (
-                <div
-                  key={order.id}
-                  className="bg-white rounded-2xl border border-gray-100 p-5"
-                >
+                <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <Link
-                        to={`/order/${order.id}`}
-                        className="font-semibold text-gray-900 hover:text-blue-600 transition-colors"
-                      >
+                      <Link to={`/order/${order.id}`} className="font-semibold text-gray-900 hover:text-blue-600 transition-colors">
                         Order #{order.id}
                       </Link>
                       <span className="text-sm text-gray-500 ml-3">
@@ -560,83 +624,207 @@ export default function Admin() {
                     <div className="flex gap-2">
                       <select
                         value={order.status}
-                        onChange={(e) =>
-                          handleUpdateOrderStatus(order.id, e.target.value)
-                        }
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border-0 cursor-pointer outline-none ${
-                          statusColors[order.status] ||
-                          "bg-gray-100 text-gray-800"
-                        }`}
+                        onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border-0 cursor-pointer outline-none ${statusColors[order.status] || "bg-gray-100 text-gray-800"}`}
                       >
-                        {orderStatuses.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
+                        {orderStatuses.map((s) => (<option key={s} value={s}>{s}</option>))}
                       </select>
-                      <button
-                        onClick={() => handleDeleteOrder(order.id)}
-                        className="px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        ✕
-                      </button>
+                      <button onClick={() => handleDeleteOrder(order.id)} className="px-2 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg transition-colors">✕</button>
                     </div>
                   </div>
 
-                  {/* Items Preview */}
                   <div className="text-sm text-gray-600 mb-3">
                     {order.items?.map((item, idx) => (
                       <span key={idx}>
-                        {item.product?.name || `Product #${item.productId}`} x
-                        {item.quantity}
+                        {item.product?.name || `Product #${item.productId}`} x{item.quantity}
                         {idx < order.items.length - 1 ? ", " : ""}
                       </span>
                     ))}
                   </div>
 
-                  {/* Payment Info + Pricing */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-gray-400">
-                        {order.paymentMethod === "GCASH" ? "📱" : order.paymentMethod === "CARD" ? "💳" : "💵"}{" "}
-                        {order.paymentMethod || "COD"}
+                        {order.paymentMethod === "GCASH" ? "📱" : order.paymentMethod === "CARD" ? "💳" : "💵"} {order.paymentMethod || "COD"}
                       </span>
                       <select
                         value={order.paymentStatus}
-                        onChange={(e) =>
-                          handleUpdatePaymentStatus(order.id, e.target.value)
-                        }
-                        className={`px-2 py-1 rounded-lg text-xs font-medium border-0 cursor-pointer outline-none ${
-                          paymentStatusColors[order.paymentStatus] ||
-                          "bg-gray-100 text-gray-800"
-                        }`}
+                        onChange={(e) => handleUpdatePaymentStatus(order.id, e.target.value)}
+                        className={`px-2 py-1 rounded-lg text-xs font-medium border-0 cursor-pointer outline-none ${paymentStatusColors[order.paymentStatus] || "bg-gray-100 text-gray-800"}`}
                       >
-                        {paymentStatuses.map((ps) => (
-                          <option key={ps} value={ps}>
-                            {ps}
-                          </option>
-                        ))}
+                        {paymentStatuses.map((ps) => (<option key={ps} value={ps}>{ps}</option>))}
                       </select>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-gray-400">
-                        {new Date(order.createdAt).toLocaleDateString("en-PH", {
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {new Date(order.createdAt).toLocaleDateString("en-PH", { month: "short", day: "numeric" })}
                       </span>
-                      <span className="text-lg font-bold text-gray-900">
-                        ₱{order.totalPrice?.toLocaleString() || 0}
-                      </span>
+                      <span className="text-lg font-bold text-gray-900">₱{order.totalPrice?.toLocaleString() || 0}</span>
                     </div>
                   </div>
 
-                  {/* GCash Ref Number */}
                   {order.paymentRef && (
                     <div className="mt-2 pt-2 border-t border-gray-50 text-xs text-gray-400">
-                      GCash Ref: <span className="font-mono">{order.paymentRef}</span>
+                      Ref: <span className="font-mono">{order.paymentRef}</span>
                     </div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== PAYMENTS TAB ===== */}
+      {activeTab === "payments" && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">Payment Settings</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Manage your e-wallet accounts. Buyers will see active wallets at checkout.
+              </p>
+            </div>
+            <button
+              onClick={openCreatePaymentForm}
+              className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white font-medium rounded-xl text-sm transition-all"
+            >
+              + Add E-Wallet
+            </button>
+          </div>
+
+          {paymentError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">{paymentError}</div>
+          )}
+
+          {/* Payment Form Modal */}
+          {showPaymentForm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                  {editingPayment ? `Edit ${editingPayment.name}` : "Add New E-Wallet"}
+                </h3>
+
+                <form onSubmit={handlePaymentSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                    <input
+                      type="text"
+                      value={paymentForm.name}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, name: e.target.value })}
+                      placeholder="e.g. GCash, PayMaya, Maya"
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Number</label>
+                    <input
+                      type="text"
+                      value={paymentForm.number}
+                      onChange={(e) => setPaymentForm({ ...paymentForm, number: e.target.value })}
+                      placeholder="e.g. 09297041003"
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Icon</label>
+                    <div className="flex flex-wrap gap-2">
+                      {EWALLET_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          onClick={() => setPaymentForm({ ...paymentForm, icon })}
+                          className={`w-10 h-10 rounded-xl text-lg flex items-center justify-center transition-all ${
+                            paymentForm.icon === icon
+                              ? "bg-gray-900 ring-2 ring-gray-900 ring-offset-2"
+                              : "bg-gray-100 hover:bg-gray-200 border border-gray-200"
+                          }`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="submit"
+                      disabled={isSavingPayment}
+                      className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-800 text-white font-semibold rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSavingPayment ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Saving...</>
+                      ) : editingPayment ? "Update" : "Add E-Wallet"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentForm(false)}
+                      className="px-6 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Payment Settings List */}
+          {isLoadingPayments ? (
+            <div className="flex justify-center py-12">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : paymentSettings.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
+              <span className="text-5xl block mb-3">💳</span>
+              <p className="text-gray-500">No e-wallets yet. Add your first one!</p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {paymentSettings.map((setting) => (
+                <div
+                  key={setting.id}
+                  className={`bg-white rounded-2xl border p-5 flex items-center justify-between transition-shadow hover:shadow-sm ${
+                    setting.isActive ? "border-gray-100" : "border-gray-200 bg-gray-50 opacity-70"
+                  }`}
+                >
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <span className="text-3xl">{setting.icon}</span>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-gray-900">{setting.name}</h3>
+                        {!setting.isActive && (
+                          <span className="px-2 py-0.5 text-xs bg-gray-200 text-gray-600 rounded-full">Inactive</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500 mt-0.5 font-mono">{setting.number}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 ml-4">
+                    <button
+                      onClick={() => handleTogglePaymentActive(setting)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                        setting.isActive
+                          ? "text-yellow-600 hover:bg-yellow-50"
+                          : "text-green-600 hover:bg-green-50"
+                      }`}
+                    >
+                      {setting.isActive ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      onClick={() => openEditPaymentForm(setting)}
+                      className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeletePaymentSetting(setting.id)}
+                      className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

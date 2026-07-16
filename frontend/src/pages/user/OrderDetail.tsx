@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getOrderById, updatePaymentRef } from "../../services/order.service";
 import { createPaymentIntent, getIntentStatus } from "../../services/payment.service";
+import { getActivePaymentSettings } from "../../services/paymentSetting.service";
 import { useAuth } from "../../contexts/AuthContext";
-import type { Order } from "../../types";
+import type { Order, PaymentSetting } from "../../types";
 
 const statusColors: Record<string, string> = {
   PENDING: "bg-yellow-100 text-yellow-800",
@@ -32,6 +33,14 @@ export default function OrderDetail() {
   const [refMsg, setRefMsg] = useState<string | null>(null);
   const [isProcessingCard, setIsProcessingCard] = useState(false);
   const [cardMsg, setCardMsg] = useState<string | null>(null);
+  const [ewallets, setEwallets] = useState<PaymentSetting[]>([]);
+
+  useEffect(() => {
+    // Load active e-wallets
+    getActivePaymentSettings()
+      .then((res) => setEwallets(res.data))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function loadOrder() {
@@ -272,9 +281,19 @@ export default function OrderDetail() {
           </p>
 
           <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-4">
-            <p className="text-sm font-medium text-blue-800">GCash Number:</p>
-            <p className="text-lg font-bold text-blue-900">0917 123 4567</p>
-            <p className="text-xs text-blue-700 mt-1">
+            <p className="text-sm font-medium text-blue-800 mb-2">Send Payment To:</p>
+            {ewallets.length > 0 ? ewallets.map((wallet) => (
+              <div key={wallet.id} className="flex items-center gap-3 py-1.5 first:pt-0 last:pb-0">
+                <span className="text-2xl">{wallet.icon}</span>
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">{wallet.name}</p>
+                  <p className="text-lg font-bold text-blue-900">{wallet.number.replace(/(\d{4})(?=\d)/g, "$1 ")}</p>
+                </div>
+              </div>
+            )) : (
+              <p className="text-sm text-blue-900 font-semibold">Loading...</p>
+            )}
+            <p className="text-xs text-blue-700 mt-2">
               Amount to pay: <strong>₱{order.totalPrice?.toLocaleString() || 0}</strong>
             </p>
           </div>

@@ -56,6 +56,15 @@ export interface SalesSummary {
   recentOrders: Order[];
 }
 
+export interface PaymentSetting {
+  id: number;
+  name: string;
+  number: string;
+  icon: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 export interface ApiError {
   success: false;
   statusCode: number;

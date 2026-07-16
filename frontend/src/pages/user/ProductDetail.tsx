@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getProductById } from "../../services/product.service";
 import { createOrder } from "../../services/order.service";
+import { getActivePaymentSettings } from "../../services/paymentSetting.service";
 import { useAuth } from "../../contexts/AuthContext";
-import type { Product } from "../../types";
+import type { Product, PaymentSetting } from "../../types";
 
 const PLACEHOLDER_IMAGE = "https://placehold.co/600x600/e2e8f0/64748b?text=999.st";
 
@@ -23,6 +24,7 @@ export default function ProductDetail() {
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "GCASH" | "CARD">("COD");
   const [shippingAddress, setShippingAddress] = useState("");
   const [showCheckoutForm, setShowCheckoutForm] = useState(false);
+  const [ewallets, setEwallets] = useState<PaymentSetting[]>([]);
 
   useEffect(() => {
     async function loadProduct() {
@@ -36,6 +38,11 @@ export default function ProductDetail() {
       }
     }
     if (id) loadProduct();
+
+    // Load active e-wallets for checkout
+    getActivePaymentSettings()
+      .then((res) => setEwallets(res.data))
+      .catch(() => {});
   }, [id]);
 
   async function handleBuyNow() {
@@ -310,16 +317,23 @@ export default function ProductDetail() {
               />
             </div>
 
-            {/* GCash Info */}
-            {paymentMethod === "GCASH" && (
+            {/* E-Wallet Info */}
+            {paymentMethod === "GCASH" && ewallets.length > 0 && (
               <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                <p className="text-sm font-medium text-blue-800 mb-1">
-                  📱 GCash Payment Instructions
+                <p className="text-sm font-medium text-blue-800 mb-2">
+                  📱 Send Payment To:
                 </p>
-                <p className="text-xs text-blue-700 leading-relaxed">
-                  After placing your order, you will receive our GCash number.
-                  Send the payment and enter the reference number in your order
-                  details for verification.
+                {ewallets.map((wallet) => (
+                  <div key={wallet.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <span className="text-2xl">{wallet.icon}</span>
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900">{wallet.name}</p>
+                      <p className="text-lg font-bold text-blue-900">{wallet.number.replace(/(\d{4})(?=\d)/g, "$1 ")}</p>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-blue-700 mt-2 leading-relaxed">
+                  After placing your order, enter the reference number in your order details for verification.
                 </p>
               </div>
             )}
