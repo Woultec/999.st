@@ -30,6 +30,11 @@ function getHeaders() {
 
 // ─── Interfaces ──────────────────────────────────────────
 
+// 📌 Shape ng response ng PayMongo API
+interface PayMongoResponse<T> {
+  data: T;
+}
+
 export interface PayMongoPaymentIntent {
   id: string;
   type: "payment_intent";
@@ -107,8 +112,8 @@ export async function createPaymentIntent(params: {
     throw new Error(`PayMongo API error: ${error}`);
   }
 
-  const result = await response.json();
-  return result.data as PayMongoPaymentIntent;
+  const result: PayMongoResponse<PayMongoPaymentIntent> = await response.json();
+  return result.data;
 }
 
 // ─── 2. Retrieve Payment Intent ──────────────────────────
@@ -126,8 +131,8 @@ export async function retrievePaymentIntent(
     throw new Error(`PayMongo retrieve error: ${error}`);
   }
 
-  const result = await response.json();
-  return result.data as PayMongoPaymentIntent;
+  const result: PayMongoResponse<PayMongoPaymentIntent> = await response.json();
+  return result.data;
 }
 
 // ─── 3. Verify Webhook Signature ─────────────────────────
