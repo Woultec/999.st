@@ -112,7 +112,7 @@ export async function createPaymentIntent(params: {
     throw new Error(`PayMongo API error: ${error}`);
   }
 
-  const result: PayMongoResponse<PayMongoPaymentIntent> = await response.json();
+  const result = (await response.json()) as PayMongoResponse<PayMongoPaymentIntent>;
   return result.data;
 }
 
@@ -131,7 +131,7 @@ export async function retrievePaymentIntent(
     throw new Error(`PayMongo retrieve error: ${error}`);
   }
 
-  const result: PayMongoResponse<PayMongoPaymentIntent> = await response.json();
+  const result = (await response.json()) as PayMongoResponse<PayMongoPaymentIntent>;
   return result.data;
 }
 
