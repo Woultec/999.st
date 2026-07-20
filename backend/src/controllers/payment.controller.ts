@@ -71,7 +71,8 @@ const paymentController = {
       }
 
       // Get base URL for success/cancel redirects
-      const baseUrl = process.env.FRONTEND_URL || "https://999st-staging-beryl.vercel.app";
+      // 📌 I-set ang FRONTEND_URL sa Render env vars! Default: main staging URL
+      const baseUrl = process.env.FRONTEND_URL || "https://999st-staging.vercel.app";
 
       // Gumawa ng Checkout Session via PayMongo
       const session = await PayMongoService.createCheckoutSession({
