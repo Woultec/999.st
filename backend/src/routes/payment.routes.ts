@@ -29,4 +29,11 @@ router.get(
   paymentController.getIntentStatus
 );
 
+// 🚀 NEW: Checkout Session (v2) — GCash, Maya, Card sa isang hosted page!
+router.post(
+  "/checkout-session",
+  authenticate,
+  paymentController.createCheckoutSession
+);
+
 export default router;

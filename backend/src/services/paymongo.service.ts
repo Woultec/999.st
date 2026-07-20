@@ -10,7 +10,8 @@
 
 import crypto from "crypto";
 
-const PAYMONGO_API = "https://api.paymongo.com/v1";
+const PAYMONGO_V1_API = "https://api.paymongo.com/v1";
+const PAYMONGO_V2_API = "https://api.paymongo.com/v2";
 
 function getSecretKey(): string {
   const key = process.env.PAYMONGO_SECRET_KEY;
@@ -63,23 +64,111 @@ export interface PayMongoPaymentIntent {
   };
 }
 
+// 📌 Checkout Session — ang gamit natin para sa GCash/Maya/Card hosted payment page!
+export interface CheckoutSession {
+  id: string;
+  type: "checkout_session";
+  attributes: {
+    checkout_url: string;       // 👉 Ito ang iri-redirect ng buyer!
+    reference_number: string;
+    status: string;
+    payment_intent: {
+      id: string;
+    } | null;
+    payments: {
+      id: string;
+      attributes: {
+        status: string;         // "paid", "failed"
+        paid_at: string | null;
+      };
+    }[];
+    metadata: {
+      order_id?: string;
+    };
+    created_at: number;
+    updated_at: number;
+  };
+}
+
 export interface PayMongoWebhookEvent {
-  type: string;              // "payment.paid", "payment.failed"
+  type: string;              // "payment.paid", "payment.failed", "checkout_session.payment.paid"
   data: {
     id: string;
     type: string;
     attributes: {
-      amount: number;
-      currency: string;
-      status: string;
+      amount?: number;
+      currency?: string;
+      status?: string;
+      reference_number?: string;
+      checkout_url?: string;
       metadata: {
         order_id?: string;   // 👉 Ito ang link sa Order natin!
       };
+      payments?: {
+        id: string;
+        attributes: {
+          status: string;
+          amount: number;
+          paid_at: string | null;
+        };
+      }[];
     };
   };
 }
 
-// ─── 1. Create Payment Intent ────────────────────────────
+// ─── 1. Create Checkout Session (v2) ─────────────────────
+// 📌 ITO ANG GAGAMITIN NATIN! 🎉
+//    Sa halip na manual GCash (type ref #) o complex PaymentIntent flow,
+//    gagawa tayo ng Checkout Session — may GCash QR, Maya, at Card na!
+//
+//    Ang buyer ay iri-redirect sa PayMongo hosted checkout page →
+//    Pumili ng payment method → Magbayad → Auto-redirect sa order page
+//    Webhook ang bahala mag-update ng order status to PAID!
+//
+//    API: POST https://api.paymongo.com/v2/checkout_sessions
+
+export async function createCheckoutSession(params: {
+  lineItems: Array<{
+    name: string;
+    amount: number;        // In centavos (e.g., 59900 for ₱599)
+    currency?: string;
+    quantity: number;
+  }>;
+  paymentMethodTypes?: string[];  // ["gcash", "card", "paymaya"]
+  orderId: number;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<CheckoutSession> {
+  const response = await fetch(`${PAYMONGO_V2_API}/checkout_sessions`, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      data: {
+        attributes: {
+          line_items: params.lineItems,
+          payment_method_types: params.paymentMethodTypes || ["gcash", "card"],
+          success_url: params.successUrl,
+          cancel_url: params.cancelUrl,
+          reference_number: `ORDER-${params.orderId}`,
+          metadata: {
+            order_id: params.orderId.toString(),
+          },
+          send_email_receipt: false,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`PayMongo Checkout Session error: ${error}`);
+  }
+
+  const result = (await response.json()) as PayMongoResponse<CheckoutSession>;
+  return result.data;
+}
+
+// ─── 2. Create Payment Intent ────────────────────────────
 // 📌 Tawag ito mula sa backend pagkatapos gumawa ng Order
 //    Amount = totalPrice × 100 (kasi centavos ang gamit ni PayMongo)
 
@@ -89,7 +178,7 @@ export async function createPaymentIntent(params: {
   description?: string;
   orderId: number;
 }): Promise<PayMongoPaymentIntent> {
-  const response = await fetch(`${PAYMONGO_API}/payment_intents`, {
+  const response = await fetch(`${PAYMONGO_V1_API}/payment_intents`, {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify({
@@ -122,7 +211,7 @@ export async function createPaymentIntent(params: {
 export async function retrievePaymentIntent(
   intentId: string
 ): Promise<PayMongoPaymentIntent> {
-  const response = await fetch(`${PAYMONGO_API}/payment_intents/${intentId}`, {
+  const response = await fetch(`${PAYMONGO_V1_API}/payment_intents/${intentId}`, {
     headers: getHeaders(),
   });
 

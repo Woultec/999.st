@@ -56,6 +56,13 @@ export interface SalesSummary {
   recentOrders: Order[];
 }
 
+export interface CheckoutSessionResponse {
+  checkoutUrl: string;
+  checkoutId: string;
+  orderId: number;
+  totalPrice: number;
+}
+
 export interface PaymentSetting {
   id: number;
   name: string;

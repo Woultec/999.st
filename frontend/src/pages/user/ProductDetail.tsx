@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getProductById } from "../../services/product.service";
 import { createOrder } from "../../services/order.service";
-import { getActivePaymentSettings } from "../../services/paymentSetting.service";
 import { useAuth } from "../../contexts/AuthContext";
-import type { Product, PaymentSetting } from "../../types";
+import type { Product } from "../../types";
 
 const PLACEHOLDER_IMAGE = "https://placehold.co/600x600/e2e8f0/64748b?text=999.st";
 
@@ -24,7 +23,6 @@ export default function ProductDetail() {
   const [paymentMethod, setPaymentMethod] = useState<"COD" | "GCASH" | "CARD">("COD");
   const [shippingAddress, setShippingAddress] = useState("");
   const [showCheckoutForm, setShowCheckoutForm] = useState(false);
-  const [ewallets, setEwallets] = useState<PaymentSetting[]>([]);
 
   useEffect(() => {
     async function loadProduct() {
@@ -38,11 +36,6 @@ export default function ProductDetail() {
       }
     }
     if (id) loadProduct();
-
-    // Load active e-wallets for checkout
-    getActivePaymentSettings()
-      .then((res) => setEwallets(res.data))
-      .catch(() => {});
   }, [id]);
 
   async function handleBuyNow() {
@@ -317,37 +310,28 @@ export default function ProductDetail() {
               />
             </div>
 
-            {/* E-Wallet Info */}
-            {paymentMethod === "GCASH" && ewallets.length > 0 && (
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                <p className="text-sm font-medium text-blue-800 mb-2">
-                  📱 Send Payment To:
+            {/* 🚀 PayMongo Checkout — Automated Payment */}
+            {(paymentMethod === "GCASH" || paymentMethod === "CARD") && (
+              <div className="mb-6 p-4 bg-gradient-to-br from-blue-50 to-purple-50 border border-blue-200 rounded-xl">
+                <p className="text-sm font-medium text-gray-800 mb-2">
+                  {paymentMethod === "GCASH" ? "📱" : "💳"} Secure Checkout
                 </p>
-                {ewallets.map((wallet) => (
-                  <div key={wallet.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-                    <span className="text-2xl">{wallet.icon}</span>
-                    <div>
-                      <p className="text-sm font-semibold text-blue-900">{wallet.name}</p>
-                      <p className="text-lg font-bold text-blue-900">{wallet.number.replace(/(\d{4})(?=\d)/g, "$1 ")}</p>
-                    </div>
-                  </div>
-                ))}
-                <p className="text-xs text-blue-700 mt-2 leading-relaxed">
-                  After placing your order, enter the reference number in your order details for verification.
+                <p className="text-xs text-gray-700 leading-relaxed">
+                  🔒 After placing your order, you will be redirected to our
+                  secure checkout page powered by <strong>PayMongo</strong>.
+                  Choose from:
                 </p>
-              </div>
-            )}
-
-            {paymentMethod === "CARD" && (
-              <div className="mb-6 p-4 bg-purple-50 border border-purple-200 rounded-xl">
-                <p className="text-sm font-medium text-purple-800 mb-1">
-                  💳 Credit/Debit Card Payment
-                </p>
-                <p className="text-xs text-purple-700 leading-relaxed">
-                  After placing your order, you will be redirected to our
-                  secure payment page powered by PayMongo to enter your card
-                  details. We accept Visa, Mastercard, and JCB. 3D Secure
-                  may be required for verification.
+                <div className="flex items-center gap-3 mt-2 text-xs">
+                  {paymentMethod === "GCASH" && (
+                    <>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-lg">📱 GCash</span>
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-lg">🔵 Maya</span>
+                    </>
+                  )}
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-lg">💳 Credit/Debit Card</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  ✓ No manual reference number needed • Auto-confirmed payment
                 </p>
               </div>
             )}

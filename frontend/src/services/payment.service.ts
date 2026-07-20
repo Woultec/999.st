@@ -3,6 +3,18 @@
 //    Pati na rin ang PayMongo.js para sa secure card form
 
 import api from "./api";
+import type { CheckoutSessionResponse } from "../types";
+
+/** 🚀 NEW: Create Checkout Session — GCash, Maya, Card sa isang hosted page!
+ *  Ang buyer ay iri-redirect sa PayMongo checkout page para pumili ng payment method.
+ */
+export async function createCheckoutSession(orderId: number) {
+  const response = await api.post<{
+    success: boolean;
+    data: CheckoutSessionResponse;
+  }>("/payments/checkout-session", { orderId });
+  return response.data;
+}
 
 /** Create Payment Intent — tawag sa backend para gumawa ng PayMongo PaymentIntent */
 export async function createPaymentIntent(orderId: number) {
