@@ -39,12 +39,12 @@ const orderController = {
       }
     }
 
-    // ✅ Validation: Payment method dapat COD o GCASH
-    if (paymentMethod && !["COD", "GCASH"].includes(paymentMethod)) {
+    // ✅ Validation: Payment method dapat COD, GCASH, o CARD
+    if (paymentMethod && !["COD", "GCASH", "CARD"].includes(paymentMethod)) {
       res.status(400).json({
         success: false,
         statusCode: 400,
-        message: "Payment method must be COD or GCASH",
+        message: "Payment method must be COD, GCASH, or CARD",
       });
       return;
     }
