@@ -72,7 +72,11 @@ const paymentController = {
 
       // Get base URL for success/cancel redirects
       // 📌 I-set ang FRONTEND_URL sa Render env vars! Default: main staging URL
-      const baseUrl = process.env.FRONTEND_URL || "https://999st-staging.vercel.app";
+      let baseUrl = process.env.FRONTEND_URL || "https://999st-staging.vercel.app";
+      // ✅ Tiyaking may https:// (kung nakalimutan sa env var)
+      if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+        baseUrl = `https://${baseUrl}`;
+      }
 
       // Gumawa ng Checkout Session via PayMongo
       const session = await PayMongoService.createCheckoutSession({
