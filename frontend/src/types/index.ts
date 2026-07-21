@@ -39,10 +39,37 @@ export interface Order {
   userId: number;
   user?: User;
   items: OrderItem[];
-  total: number;
+  totalPrice: number;
   status: "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+  paymentMethod: "COD" | "GCASH" | "CARD" | null;
+  paymentStatus: "UNPAID" | "PAID" | "VERIFIED" | "REFUNDED";
+  paymentRef: string | null;
+  paymongoIntentId?: string | null;
+  shippingAddress: string | null;
   createdAt: string;
-  updatedAt: string;
+}
+
+export interface SalesSummary {
+  totalOrders: number;
+  totalRevenue: number;
+  ordersByStatus: { status: string; _count: { id: number } }[];
+  recentOrders: Order[];
+}
+
+export interface CheckoutSessionResponse {
+  checkoutUrl: string;
+  checkoutId: string;
+  orderId: number;
+  totalPrice: number;
+}
+
+export interface PaymentSetting {
+  id: number;
+  name: string;
+  number: string;
+  icon: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface ApiError {

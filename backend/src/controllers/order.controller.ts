@@ -9,11 +9,12 @@ import * as OrderService from "../services/order.service";
 export type OrderStatus = "PENDING" | "PROCESSING" | "SHIPPED" | "DELIVERED" | "CANCELLED";
 
 const VALID_STATUSES: OrderStatus[] = ["PENDING", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"];
+const VALID_PAYMENT_STATUSES = ["UNPAID", "PAID", "VERIFIED", "REFUNDED"];
 
 const orderController = {
   /** POST /api/orders — Gumawa ng bagong order (buyer) */
   createOrder: async (req: Request, res: Response): Promise<void> => {
-    const { items } = req.body;
+    const { items, paymentMethod, shippingAddress } = req.body;
     const userId = req.user!.id;
 
     // ✅ Validation: Dapat may items
@@ -38,8 +39,33 @@ const orderController = {
       }
     }
 
+    // ✅ Validation: Payment method dapat COD, GCASH, o CARD
+    if (paymentMethod && !["COD", "GCASH", "CARD"].includes(paymentMethod)) {
+      res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "Payment method must be COD, GCASH, or CARD",
+      });
+      return;
+    }
+
+    // ✅ Validation: Shipping address required for GCASH
+    if (paymentMethod === "GCASH" && !shippingAddress) {
+      res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "Shipping address is required for GCASH payments",
+      });
+      return;
+    }
+
     try {
-      const newOrder = await OrderService.createOrder(userId, items);
+      const newOrder = await OrderService.createOrder({
+        userId,
+        items,
+        paymentMethod,
+        shippingAddress,
+      });
 
       res.status(201).json({
         success: true,
@@ -137,6 +163,79 @@ const orderController = {
     res.json({
       success: true,
       data: updatedOrder,
+    });
+  },
+
+  /** PUT /api/orders/:id/payment — I-update ang payment status (admin) */
+  updatePaymentStatus: async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    const { paymentStatus, paymentRef } = req.body;
+
+    if (!paymentStatus || !VALID_PAYMENT_STATUSES.includes(paymentStatus)) {
+      res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: `Invalid payment status. Must be one of: ${VALID_PAYMENT_STATUSES.join(", ")}`,
+      });
+      return;
+    }
+
+    const updatedOrder = await OrderService.updatePaymentStatus(id, paymentStatus, paymentRef);
+
+    if (!updatedOrder) {
+      res.status(404).json({
+        success: false,
+        statusCode: 404,
+        message: `Order with ID ${id} not found`,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: updatedOrder,
+    });
+  },
+
+  /** PUT /api/orders/:id/payment-ref — Buyer magbigay ng GCash ref number */
+  updatePaymentRef: async (req: Request, res: Response): Promise<void> => {
+    const id = Number(req.params.id);
+    const userId = req.user!.id;
+    const { paymentRef } = req.body;
+
+    if (!paymentRef || paymentRef.trim().length === 0) {
+      res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "Payment reference number is required",
+      });
+      return;
+    }
+
+    const updatedOrder = await OrderService.updatePaymentRef(id, userId, paymentRef.trim());
+
+    if (!updatedOrder) {
+      res.status(400).json({
+        success: false,
+        statusCode: 400,
+        message: "Unable to update payment. Make sure this is a GCASH order and belongs to you.",
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: updatedOrder,
+    });
+  },
+
+  /** GET /api/orders/sales-summary — Sales stats para sa admin dashboard */
+  getSalesSummary: async (_req: Request, res: Response): Promise<void> => {
+    const summary = await OrderService.getSalesSummary();
+
+    res.json({
+      success: true,
+      data: summary,
     });
   },
 

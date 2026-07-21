@@ -39,15 +39,40 @@ model Product {
 
 // ─── Order Model ──────────────────────────────────────────
 model Order {
-  id         Int         @id @default(autoincrement())
-  userId     Int         @map("user_id")
-  user       User        @relation(fields: [userId], references: [id])
-  status     String      @default("PENDING")    // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
-  totalPrice Float       @map("total_price")
-  items      OrderItem[]
-  createdAt  DateTime    @default(now()) @map("created_at")
+  id              Int         @id @default(autoincrement())
+  userId          Int         @map("user_id")
+  user            User        @relation(fields: [userId], references: [id])
+  status          String      @default("PENDING")    // PENDING, PROCESSING, SHIPPED, DELIVERED, CANCELLED
+  totalPrice      Float       @map("total_price")
+  items           OrderItem[]
+
+  // 💳 Payment fields
+  paymentMethod   String?     @default("COD") @map("payment_method")   // "COD", "GCASH", o "CARD"
+  paymentStatus   String      @default("UNPAID") @map("payment_status") // UNPAID, PAID, VERIFIED, REFUNDED
+  paymentRef      String?     @map("payment_ref")                       // GCash reference number
+  paymongoIntentId String?   @map("paymongo_intent_id")                 // PayMongo Payment Intent ID (for CARD direct flow)
+  paymongoCheckoutId String? @map("paymongo_checkout_id")               // PayMongo Checkout Session ID (new v2 flow)
+
+  // 📦 Shipping
+  shippingAddress String?     @map("shipping_address")
+
+  createdAt       DateTime    @default(now()) @map("created_at")
 
   @@map("orders")
+}
+
+// ─── PaymentSetting Model ────────────────────────────────
+// 📌 Mga e-wallet na pwedeng gamitin ng buyers (GCash, PayMaya, etc.)
+//    Admin ang nagma-manage nito sa dashboard
+model PaymentSetting {
+  id        Int      @id @default(autoincrement())
+  name      String                                    // "GCash", "PayMaya", "Maya"
+  number    String                                    // 09297041003
+  icon      String   @default("📱")                   // Emoji icon
+  isActive  Boolean  @default(true)                   // Pwedeng i-deactivate
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("payment_settings")
 }
 
 // ─── OrderItem Model ─────────────────────────────────────

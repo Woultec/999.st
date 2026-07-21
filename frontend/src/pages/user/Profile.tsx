@@ -1,8 +1,24 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { updateProfile, changePassword } from "../../services/auth.service";
 import { getMyOrders } from "../../services/order.service";
 import type { Order } from "../../types";
+
+const statusColors: Record<string, string> = {
+  PENDING: "bg-yellow-100 text-yellow-800",
+  PROCESSING: "bg-blue-100 text-blue-800",
+  SHIPPED: "bg-purple-100 text-purple-800",
+  DELIVERED: "bg-green-100 text-green-800",
+  CANCELLED: "bg-red-100 text-red-800",
+};
+
+const paymentStatusColors: Record<string, string> = {
+  UNPAID: "bg-yellow-100 text-yellow-800",
+  PAID: "bg-blue-100 text-blue-800",
+  VERIFIED: "bg-green-100 text-green-800",
+  REFUNDED: "bg-red-100 text-red-800",
+};
 
 export default function Profile() {
   const { user, refreshUser } = useAuth();
@@ -33,7 +49,7 @@ export default function Profile() {
         const response = await getMyOrders();
         setOrders(response.data);
       } catch {
-        // Silently fail - orders section will show empty
+        // Silently fail
       } finally {
         setIsLoadingOrders(false);
       }
@@ -99,14 +115,6 @@ export default function Profile() {
       setIsUpdatingPassword(false);
     }
   }
-
-  const statusColors: Record<string, string> = {
-    PENDING: "bg-yellow-100 text-yellow-800",
-    PROCESSING: "bg-blue-100 text-blue-800",
-    SHIPPED: "bg-purple-100 text-purple-800",
-    DELIVERED: "bg-green-100 text-green-800",
-    CANCELLED: "bg-red-100 text-red-800",
-  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 md:py-12">
@@ -258,7 +266,12 @@ export default function Profile() {
 
       {/* Orders Section */}
       <div className="mt-8 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">My Orders</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-gray-900">Order History</h2>
+          <span className="text-sm text-gray-500">
+            {orders.length} order{orders.length !== 1 ? "s" : ""}
+          </span>
+        </div>
 
         {isLoadingOrders ? (
           <div className="flex justify-center py-8">
@@ -267,33 +280,55 @@ export default function Profile() {
         ) : orders.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <span className="text-4xl block mb-2">📭</span>
-            No orders yet. Start shopping!
+            <p>No orders yet.</p>
+            <Link
+              to="/"
+              className="text-blue-600 hover:text-blue-700 font-medium text-sm mt-2 inline-block"
+            >
+              Start shopping →
+            </Link>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {orders.map((order) => (
-              <div
+              <Link
                 key={order.id}
-                className="border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-colors"
+                to={`/order/${order.id}`}
+                className="block border border-gray-100 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm text-gray-500">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-900">
                     Order #{order.id}
                   </span>
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      statusColors[order.status] || "bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    {order.status}
-                  </span>
+                  <div className="flex gap-1.5">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        statusColors[order.status] || "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {order.status}
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        paymentStatusColors[order.paymentStatus] ||
+                        "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {order.paymentStatus}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-gray-600">
                     {order.items?.length || 0} item(s)
+                    {order.paymentMethod && (
+                      <span className="ml-2 text-xs text-gray-400">
+                        · {order.paymentMethod === "GCASH" ? "📱 GCash" : order.paymentMethod === "CARD" ? "💳 Card" : "💵 COD"}
+                      </span>
+                    )}
                   </div>
                   <div className="text-lg font-bold text-gray-900">
-                    ₱{order.total?.toLocaleString() || 0}
+                    ₱{order.totalPrice?.toLocaleString() || 0}
                   </div>
                 </div>
                 <div className="text-xs text-gray-400 mt-2">
@@ -303,7 +338,7 @@ export default function Profile() {
                     day: "numeric",
                   })}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

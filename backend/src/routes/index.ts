@@ -5,6 +5,8 @@ import productRouter from "./product.routes";
 import authRouter from "./auth.routes";
 import orderRouter from "./order.routes";
 import setupRouter from "./setup.routes";
+import paymentRouter from "./payment.routes";
+import paymentSettingRouter from "./paymentSetting.routes";
 
 const router = Router();
 
@@ -14,5 +16,7 @@ router.use("/products", productRouter);
 router.use("/auth", authRouter);
 router.use("/orders", orderRouter);
 router.use("/setup", setupRouter);
+router.use("/payments", paymentRouter);
+router.use("/payment-settings", paymentSettingRouter);
 
 export default router;

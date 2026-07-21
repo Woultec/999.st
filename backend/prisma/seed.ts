@@ -94,10 +94,27 @@ async function main() {
     console.log(`   ✅ ${created.name.padEnd(25)} ₱${product.price}`);
   }
 
+  // ─── 3. Default Payment Settings ──────────────────────
+  console.log("\n💳 Setting up default e-wallet...");
+
+  await prisma.paymentSetting.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      name: "GCash",
+      number: "09297041003",
+      icon: "📱",
+      isActive: true,
+    },
+  });
+
+  console.log(`   ✅ GCash: 09297041003`);
+
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("🎉 Seed complete!");
   console.log(`   👑 Admin: admin@email.com / admin123`);
   console.log(`   📦 Products: ${products.length} items`);
+  console.log(`   💳 GCash: 09297041003`);
   console.log(`   🛒 Buyer: buyer@email.com / password123 (kung naka-register na)`);
 }
 
